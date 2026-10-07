@@ -67,6 +67,49 @@
       <span>共 {{ total }} 条货物装卸记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
+
+    <!-- 其它入口的货物装卸台账不单独维护设备清单，统一用装卸设备管理的同步替代清单 -->
+    <div class="dispatch-panel">
+      <h3 class="panel-title">装卸设备清单（同步替代）</h3>
+      <p class="panel-tip">
+        本台账的设备清单已由「装卸设备管理」替代并保持同步：整组维保下发后这里实时反映设备状态与归属，
+        维保中、已报修设备不可用于本次装卸，不再维护独立清单。
+      </p>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>设备编号</th>
+            <th>设备类型</th>
+            <th>适用机型</th>
+            <th>最大载重</th>
+            <th>维保记录</th>
+            <th>设备状态</th>
+            <th>可用于装卸</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="equip in equipmentRows" :key="String(equip.id)">
+            <td>{{ equip['设备编号'] ?? '—' }}</td>
+            <td>{{ equip['设备类型'] ?? '—' }}</td>
+            <td>{{ equip['适用机型'] ?? '—' }}</td>
+            <td>{{ equip['最大载重'] ?? '—' }}</td>
+            <td>{{ equip['维保记录'] ?? '—' }}</td>
+            <td>
+              {{ equip.status }}
+              <span v-if="ownerOf(equip)" class="owner-tag">归属 {{ ownerOf(equip) }}</span>
+            </td>
+            <td>
+              <span :class="availableForCargo(equip) ? 'item-accepted' : 'item-skipped'">
+                {{ availableForCargo(equip) ? '可调用' : availabilityReason(equip) }}
+              </span>
+            </td>
+          </tr>
+          <tr v-if="!equipmentRows.length">
+            <td colspan="7" class="empty-state">暂无同步的装卸设备数据</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 </template>
 
@@ -99,6 +142,29 @@ const statusSummary = computed(() =>
   })),
 )
 
+// 同步替代清单：直接读装卸设备模块的同一份数据，维保下发改完这里即同步。
+const equipmentRows = ref<EntryRow[]>([])
+
+function ownerOf(row: EntryRow): string {
+  return String(row['维保归属'] ?? '')
+}
+
+function availableForCargo(row: EntryRow): boolean {
+  const status = String(row.status)
+  return status === '待机' || status === '运行中'
+}
+
+function availabilityReason(row: EntryRow): string {
+  const status = String(row.status)
+  if (status === '维保中') {
+    return '维保中不可用'
+  }
+  if (status === '已报修') {
+    return '已报修不可用'
+  }
+  return '不可用'
+}
+
 function resetFilters() {
   filters.value = {}
   reload()
@@ -128,6 +194,8 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    // 同步替代清单每次随台账一起刷新。
+    equipmentRows.value = listEntries('load_equip').items
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '货物装卸列表读取失败'
   }
