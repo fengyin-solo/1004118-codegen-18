@@ -33,6 +33,10 @@
       <button class="btn ghost" type="button" @click="resetFilters">重置条件</button>
     </form>
 
+    <p class="sync-banner">
+      本台账由「装卸设备」清单同步替代：装卸设备整组维保下发或单台状态变化后，台账按设备类型、适用机型、最大载重、维保记录与设备状态整体替换。
+    </p>
+
     <table class="data-table">
       <thead>
         <tr>
@@ -73,12 +77,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
-import {
-  downloadEntries,
-  listEntries,
-  moduleMeta,
-  runAction as applyAction,
-} from '@/api/local-service'
+import { downloadEntries, listEntries, moduleMeta } from '@/api/local-service'
+import { syncCargoLedger } from '@/api/maintenance-service'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('cargo')
@@ -109,17 +109,14 @@ function exportRows() {
 }
 
 function openCreate() {
-  errorMessage.value = '货物装卸登记入口尚未接入审批流'
+  errorMessage.value = '货物装卸台账由装卸设备清单同步替代，请在「装卸设备」页维护设备'
 }
 
 function runAction(action: string, row: EntryRow) {
-  errorMessage.value = ''
-  const result = applyAction(meta.key, Number(row.id), action)
-  if (!result.ok) {
-    errorMessage.value = result.message
-    return
-  }
-  reload()
+  // 台账是装卸设备清单的同步投影，状态流转只能在「装卸设备」页逐台或整组办理。
+  errorMessage.value = `台账已由装卸设备清单同步替代，不能在本页${action}（设备 ${String(
+    row['来源设备编号'] ?? row.id,
+  )}），请到「装卸设备」页办理`
 }
 
 function reload() {
@@ -133,5 +130,9 @@ function reload() {
   }
 }
 
-onMounted(reload)
+onMounted(() => {
+  // 其它入口看到的货物装卸台账始终以装卸设备清单为准。
+  syncCargoLedger()
+  reload()
+})
 </script>
